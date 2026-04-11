@@ -1,5 +1,22 @@
 # A generalizable 3D framework and model for self-supervised learning in medical imaging
 
+## Instructions for building Docker for CVPR 2026 CT FM Challenge
+
+A `Dockerfile` is provided to build a container image with all dependencies and the 3DINO-ViT weights baked in. Download `3dino_vit_weights.pth` from the [HuggingFace release](https://huggingface.co/AICONSlab/3DINO-ViT) and place it in the repo root before building.
+
+Build the image:
+
+```shell
+docker build -f Dockerfile -t 3dino_lp .
+```
+
+Export the image to a distributable archive:
+
+```shell
+docker save 3dino_lp | gzip > 3dino_lp.tar.gz
+```
+
+
 ***npj Digital Medicine (2025)***
 
 <img src="assets/3dino_logo.png" alt="3DINO logo" width="200px"/>

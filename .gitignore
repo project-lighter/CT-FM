@@ -12,3 +12,6 @@ cufile.log
 *.swp
 
 .vscode/
+
+*.pth
+*.tar.gz
