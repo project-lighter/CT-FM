@@ -8,7 +8,7 @@ MASKS_DIR="${MASKS_DIR:-}"  # Optional masks directory
 NUM_CLASSES="${NUM_CLASSES:-}"  # Default to 2 classes if not set
 
 # Build command with optional masks_path
-CMD="PYTHONPATH=. python extract_feat_LP.py -i \"$INPUT_DIR\" -o \"$OUTPUT_DIR\" --config-file ./dinov2/configs/train/vit3d_highres.yaml --pretrained-weights ./3dino_vit_weights.pth"
+CMD="PYTHONPATH=. python extract_feat_LP.py -i \"$INPUT_DIR\" -o \"$OUTPUT_DIR\""
 
 # Add masks_path argument if MASKS_DIR is set and not empty
 if [ -n "$MASKS_DIR" ]; then

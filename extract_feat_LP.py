@@ -26,7 +26,6 @@ from monai.transforms import (
 
 from monai.transforms import DeleteItemsd
 import numpy as np
-from functools import partial
 import json
 import argparse
 import h5py
@@ -35,7 +34,7 @@ from numbers import Number
 import torch.distributed as dist
 from tqdm import tqdm
 
-from dinov2.eval.setup import setup_and_build_model_3d
+from lighter_zoo import SegResEncoder
 # Set device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -303,34 +302,16 @@ if __name__ == "__main__":
     ap.add_argument("--num_classes", type=int, default=2, help='Number of classes for classification')
     ap.add_argument("--cache-dir", type=str, default=None, help="path to cache directory for monai persistent dataset")
     ap.add_argument(
-        "--config-file",
-        type=str,
-        help="Model configuration file",
-    )
-    ap.add_argument(
         "--pretrained-weights",
         type=str,
-        help="Pretrained model weights",
-    )
-    ap.add_argument(
-        "--output-dir",
-        default="./output_unused",
-        type=str,
-        help="Output directory to write results and logs",
-    )
-    ap.add_argument(
-        "--opts",
-        help="Extra configuration options",
-        default=[],
-        nargs="+",
+        default="/opt/app/ct_fm_weights",
+        help="Path to CT-FM pretrained weights directory",
     )
 
     args = ap.parse_args()
 
-    model, autocast_dtype = setup_and_build_model_3d(args)
-    autocast_ctx = partial(torch.cuda.amp.autocast, enabled=True, dtype=autocast_dtype)
+    model = SegResEncoder.from_pretrained(args.pretrained_weights)
     model.eval()
-
     model.to(device)
 
     # get only encoder of the model and mean pool (bs, c, d, h, w) acrodd d, h, w
@@ -371,13 +352,10 @@ if __name__ == "__main__":
             # Load images using SimpleITK (matching nnssl pipeline)
             LoadImaged(keys=["image"], ensure_channel_first=True),
             EnsureTyped(keys=["image"]),
-            # CopyMaskd(keys=["mask"], mask_key=["mask"]),
-            # Z-score normalization (matching default_preprocessor with ZScoreNormalization)
-            Orientationd(keys=['image'], axcodes="RAS"),
+            Orientationd(keys=['image'], axcodes="SPL"),
             # Resample to isotropic 1mm spacing using nnssl resampler
             Spacingd(keys=['image'], pixdim=(1.0, 1.0, 1.0), mode='bilinear'),
-            #ScaleIntensityRangePercentilesd(keys=['image'], lower=0.05, upper=99.95, b_min=-1, b_max=1, clip=True, channel_wise=True),
-            ScaleIntensityRanged(keys=["image"], a_min=-175, a_max=250, b_min=-1, b_max=1, clip=True),
+            ScaleIntensityRanged(keys=["image"], a_min=-1024, a_max=2048, b_min=0, b_max=1, clip=True),
             ResizeWithPadOrCropd(keys=["image"], spatial_size=(image_size, image_size, image_size)),
             ToTensord(keys=["image"]),
         ])
@@ -387,15 +365,13 @@ if __name__ == "__main__":
             LoadImaged(keys=["image", "mask"], ensure_channel_first=True),
             EnsureTyped(keys=["image"]),
             CopyMaskd(keys=["mask"], mask_key=["mask"]),
-            Orientationd(keys=['image', 'mask'], axcodes="RAS"),
+            Orientationd(keys=['image', 'mask'], axcodes="SPL"),
             Spacingd(keys=['image'], pixdim=(1.0, 1.0, 1.0), mode='bilinear'),
             Spacingd(keys=['mask'], pixdim=(1.0, 1.0, 1.0), mode='nearest'),
-            #ScaleIntensityRangePercentilesd(keys=['image'], lower=0.05, upper=99.95, b_min=-1, b_max=1, clip=True, channel_wise=True),
-            #ScaleIntensityRanged(keys=["image"], a_min=-175, a_max=250, b_min=-1, b_max=1, clip=True),
             MaskCenterCropd(keys=["image", "mask"], mask_key="mask", roi_size=(image_size, image_size, image_size), fg_labels=[1]),
             DeleteItemsd(keys=["mask_original"]),  # Remove original mask to save memory
             DeleteItemsd(keys=['mask']),
-            ScaleIntensityRangePercentilesd(keys=['image'], lower=0.05, upper=99.95, b_min=-1, b_max=1, clip=True, channel_wise=True),
+            ScaleIntensityRanged(keys=["image"], a_min=-1024, a_max=2048, b_min=0, b_max=1, clip=True),
             ResizeWithPadOrCropd(keys=["image"], spatial_size=(image_size, image_size, image_size)),
             ToTensord(keys=["image"]),
         ])
@@ -441,17 +417,8 @@ if __name__ == "__main__":
             images = images.to(device, non_blocking=True)
 
             # Forward pass through the model to get image latent features
-            with autocast_ctx():
-                outputs = model.get_intermediate_layers(
-                    images,
-                    n=1,
-                    return_class_token=True,
-                    reshape=False
-                )
-            image_embeddings = outputs[0][1]
-            patch_embs = outputs[0][0].mean(dim=1)
-            image_embeddings = (image_embeddings + patch_embs) / 2
-            #image_embeddings = torch.cat([image_embeddings, patch_embs], dim=1)
+            output = model(images)[-1]  # last feature map [B, 512, H', W', D']
+            image_embeddings = F.adaptive_avg_pool3d(output, 1).view(images.shape[0], -1)  # [B, 512]
             image_embeddings = image_embeddings.detach().cpu()
 
             # Save h5 files immediately for this batch
@@ -471,5 +438,5 @@ if __name__ == "__main__":
                 processed_count += 1
 
             # Clean up memory immediately after saving
-            del outputs, images, image_embeddings, batch
+            del output, images, image_embeddings, batch
             torch.cuda.empty_cache()

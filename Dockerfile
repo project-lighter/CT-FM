@@ -8,7 +8,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Time zone setting
 ENV TZ=Etc/UTC
 
-RUN apt-get update && apt-get install -y \
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4 \
+ && apt-get update || true \
+ && apt-get install -y --no-install-recommends --fix-missing \
     git ffmpeg libsm6 libxext6 tzdata \
  && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
  && echo $TZ > /etc/timezone \
@@ -24,18 +26,18 @@ ENV PATH="/home/user/.local/bin:${PATH}"
 # Upgrade pip
 RUN python -m pip install --user -U pip && python -m pip install --user pip-tools
 
-# Copy the entire CT-NEXUS repository
-COPY --chown=user:user ./dinov2 /opt/app/dinov2
 COPY --chown=user:user extract_feat_LP.py /opt/app/extract_feat_LP.py
 COPY --chown=user:user extract_feat_LP.sh /opt/app/extract_feat_LP.sh
 COPY --chown=user:user requirements.txt /opt/app/requirements.txt
-COPY --chown=user:user ./3dino_vit_weights.pth /opt/app/3dino_vit_weights.pth
 
 # Set working directory for installation
 WORKDIR /opt/app/
 
-# Install nnssl package with all dependencies from pyproject.toml
+# Install dependencies
 RUN pip install --user -r requirements.txt
+
+# Download CT-FM weights from HuggingFace Hub
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='project-lighter/ct_fm_feature_extractor', local_dir='./ct_fm_weights')"
 
 # Set working directory to feature_extraction
 WORKDIR /opt/app/
