@@ -8,3 +8,6 @@ scikit-learn
 h5py
 lighter_zoo
 huggingface_hub
+matplotlib
+pandas
+wandb
