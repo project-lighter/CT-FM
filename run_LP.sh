@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON="${PYTHON:-${SCRIPT_DIR}/.venv/bin/python}"
+
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 EMBEDS_DIR="${EMBEDS_DIR:-/workspace/outputs}"      # flat dir of .h5 files from extract_feat_LP.sh
 LABELS_ROOT="${LABELS_ROOT:-/workspace/labels}"     # dir containing {disease}.csv files
@@ -15,7 +18,7 @@ disease_list=(
 
 for disease in "${disease_list[@]}"; do
     echo "Running linear probing for ${disease} ..."
-    python run_LP.py \
+    "$PYTHON" "$SCRIPT_DIR/run_LP.py" \
         --embeds_dir "$EMBEDS_DIR" \
         --labels_root "$LABELS_ROOT" \
         --target "$disease" \

@@ -122,7 +122,7 @@ def train_one_epoch(model, loader, opt, crit, device):
 @torch.no_grad()
 def evaluate(model, loader, crit, device, num_classes, monitor_metric):
     base_metrics = MetricCollection({
-        "acc": Accuracy(task="multiclass", num_classes=num_classes),
+        "acc": Accuracy(task="multiclass", num_classes=num_classes, top_k=1),
         "f1": F1Score(task="multiclass", num_classes=num_classes, average="macro"),
         "auroc": AUROC(task="multiclass", num_classes=num_classes),
         "ap": AveragePrecision(task="multiclass", num_classes=num_classes),
