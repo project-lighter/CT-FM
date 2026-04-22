@@ -31,16 +31,17 @@ def load_embeddings(embeds_dir):
     return embeddings
 
 
-def load_labels(labels_root, disease):
+def load_labels(labels_root, disease, label_col=None):
     """Load GT labels for a disease, returns dict {case_id: label}."""
     csv_path = os.path.join(labels_root, f"{disease}.csv")
     if not os.path.exists(csv_path):
         return {}
     df = pd.read_csv(csv_path)
+    col = label_col if label_col else disease
     labels = {}
     for _, row in df.iterrows():
         case_id = str(row["case_id"]).replace(".nii.gz", "").replace(".h5", "")
-        labels[case_id] = int(row[disease])
+        labels[case_id] = int(row[col])
     return labels
 
 
@@ -84,6 +85,8 @@ def main():
     ap.add_argument("--labels_root", required=True)
     ap.add_argument("--out_csv", required=True)
     ap.add_argument("--diseases", nargs="+", default=None)
+    ap.add_argument("--label_col", type=str, default=None,
+                    help="Column name in labels CSV (defaults to disease name)")
     args = ap.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -115,7 +118,7 @@ def main():
             continue
 
         print(f"Predicting {disease} using {os.path.basename(ckpt_path)} ...")
-        labels = load_labels(args.labels_root, disease)
+        labels = load_labels(args.labels_root, disease, label_col=args.label_col)
         rows = predict_disease(embeddings, ckpt_path, labels, device)
         for row in rows:
             row["disease_name"] = disease
